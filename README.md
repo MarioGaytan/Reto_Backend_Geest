@@ -23,6 +23,10 @@ curl -H "x-api-key: 22f9f7d6f2c5f15eaff9115b3872bf0fea5250d7dc3562bf" \
 
 `GET /health` es público y no requiere clave.
 
+Para probar sin configurar nada, importa [`postman_collection.json`](postman_collection.json) en Postman: trae los 9 endpoints con sus casos de error y la clave ya configurada a nivel de colección.
+
+**Cómo verificar las notificaciones.** No hace falta acceder al sistema externo. Cada intento de envío queda registrado y se consulta con `GET /tasks/:idTask/notifications`, que devuelve número de intento, timestamp, status HTTP y si tuvo éxito. Para verlo: crea una tarea, asígnale un usuario, complétala (se archiva sola) y consulta ese endpoint.
+
 ---
 
 ## Ejecutar localmente
@@ -178,7 +182,7 @@ erDiagram
 
 ## Supuestos
 
-- **La notificación externa no se desarrolla.** `NOTIFY_URL` apunta a un endpoint de prueba, tal como permite el enunciado.
+- **La notificación externa no se desarrolla.** `NOTIFY_URL` apunta a un endpoint de prueba, tal como permite el enunciado. La verificación no depende de ese destino: los intentos quedan registrados en la base y se consultan con `GET /tasks/:idTask/notifications`.
 - **No hay contraseñas ni sesiones.** El contrato no las contempla: `POST /users` no recibe contraseña y `/complete` recibe el `userId` en el cuerpo. Se interpreta como una API máquina-a-máquina donde el cliente afirma en nombre de quién actúa; la API Key autentica al sistema, el `userId` identifica a la persona.
 - **Una tarea sin asignados nunca se archiva sola.** El archivado solo se evalúa al completar una parte.
 - **El archivado no se revierte** y **asignar a una tarea archivada devuelve `409`**: dejaría una parte pendiente que nada volvería a cerrar.
