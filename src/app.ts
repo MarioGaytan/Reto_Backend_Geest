@@ -10,7 +10,9 @@ export function createApp(): Express {
   app.use(express.urlencoded({ extended: true }));
   app.use(requestLogger);
 
-  app.use('/api', router);
+  // Montado en la raiz: el reto exige los endpoints exactos (POST /users,
+  // no POST /api/users). No se antepone ningun prefijo.
+  app.use('/', router);
 
   app.use(notFound);
   app.use(errorHandler);
