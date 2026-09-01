@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: geest-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geest
+      POSTGRES_PASSWORD: geest
+      POSTGRES_DB: geest
+    ports:
+      # 5436 en el host: 5432/5433/5435 ya los usan otros proyectos
+      - "5436:5432"
+    volumes:
+      - geest_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geest -d geest"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  geest_pgdata:
