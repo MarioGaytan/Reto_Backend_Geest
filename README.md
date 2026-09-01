@@ -66,6 +66,8 @@ Se copian de `.env.example`. `DATABASE_URL`, `NOTIFY_URL` y `API_KEY` son obliga
 
 Pendiente de implementar: `GET /tasks/:idTask/notifications`.
 
+Todos los `POST` aceptan el header `Idempotency-Key`. Con la misma llave y el mismo cuerpo la operación se ejecuta una sola vez y ambas respuestas son idénticas, incluso si los requests llegan en paralelo. Con la misma llave y un cuerpo distinto se responde `422`.
+
 Los errores siempre responden con la misma forma:
 
 ```json
@@ -149,6 +151,8 @@ erDiagram
 **Restricciones `CHECK` que hacen imposible el estado inconsistente.** Una tarea `archived` siempre tiene `archived_at`; una `open` nunca lo tiene. Igual para `completed` / `completed_at`. Un archivado a medias no puede existir ni por error de código.
 
 **Unicidad de email insensible a mayúsculas** (índice sobre `lower(email)`). `Mario@x.com` y `mario@x.com` son la misma persona.
+
+**La idempotencia la arbitra el índice único, no una lectura previa.** Entre un `SELECT` que comprueba si la llave existe y el `INSERT` que la crea hay una ventana en la que dos requests paralelos verían ambos "no existe". En su lugar se inserta directamente en `idempotency_keys`: el request que gana mantiene su transacción abierta mientras ejecuta la operación, y el gemelo queda bloqueado en su propio `INSERT` hasta el `COMMIT`, momento en el que lee la respuesta ya guardada y la reproduce. Si la operación falla con `5xx` se hace `ROLLBACK` y la llave queda libre para un reintento real.
 
 **El archivado automático se serializa con un lock de fila.** `POST /tasks/:idTask/complete` abre una transacción que empieza con `SELECT … FOR UPDATE` sobre la tarea. Si los dos últimos asignados completan a la vez, el segundo espera al primero, ve la tarea ya archivada y no repite la transición. Es la garantía de "exactamente una vez" del Nivel 3.
 
