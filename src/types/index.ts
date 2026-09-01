@@ -79,3 +79,29 @@ export interface RawAssignee {
 export interface TaskWithAssigneesRow extends TaskRow {
   assignees: RawAssignee[];
 }
+
+/** Tarea vista desde un usuario concreto: GET /users/:idUser/tasks. */
+export interface UserTaskDTO extends TaskDTO {
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export interface UserTaskRow extends TaskRow {
+  completed: boolean;
+  completed_at: Date | null;
+}
+
+export interface AssignResultDTO {
+  message: string;
+  taskId: number;
+  assignedUserIds: number[];
+  alreadyAssignedUserIds: number[];
+}
+
+export interface CompleteResultDTO {
+  message: string;
+  taskId: number;
+  userId: number;
+  taskStatus: TaskStatus;
+  archived: boolean;
+}

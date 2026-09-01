@@ -78,3 +78,23 @@ export const idParamSchema = z.coerce
   .number({ invalid_type_error: 'el id debe ser un numero' })
   .int('el id debe ser un numero entero')
   .positive('el id debe ser un numero positivo');
+
+/** Id que llega dentro de un cuerpo JSON. Se acepta "1" ademas de 1. */
+const idEnCuerpo = (etiqueta: string) =>
+  z.coerce
+    .number({ invalid_type_error: `${etiqueta} debe ser un numero` })
+    .int(`${etiqueta} debe ser un numero entero`)
+    .positive(`${etiqueta} debe ser un numero positivo`);
+
+export const assignUsersSchema = z.object({
+  userIds: z
+    .array(idEnCuerpo('cada elemento de userIds'), {
+      required_error: 'userIds es obligatorio',
+      invalid_type_error: 'userIds debe ser un arreglo de ids',
+    })
+    .min(1, 'userIds debe contener al menos un id'),
+});
+
+export const completeTaskSchema = z.object({
+  userId: idEnCuerpo('userId'),
+});

@@ -4,6 +4,8 @@ import { AppError } from '../utils/AppError';
 import type {
   UserDTO,
   UserRow,
+  UserTaskDTO,
+  UserTaskRow,
   UserWithPendingTasksDTO,
   UserWithPendingTasksRow,
 } from '../types';
@@ -78,13 +80,40 @@ export async function listUsers(): Promise<UserWithPendingTasksDTO[]> {
   }));
 }
 
-/** Devuelve los ids que no existen en la tabla, en el orden recibido. */
-export async function findMissingUserIds(ids: readonly number[]): Promise<number[]> {
-  if (ids.length === 0) return [];
-  const { rows } = await query<{ id: number }>(
-    `SELECT id FROM users WHERE id = ANY($1::int[])`,
-    [ids],
+/**
+ * Lista las tareas asignadas a un usuario indicando si completo su parte.
+ * GET /users/:idUser/tasks
+ */
+export async function listTasksByUser(userId: number): Promise<UserTaskDTO[]> {
+  const { rowCount } = await query(`SELECT 1 FROM users WHERE id = $1`, [userId]);
+  if (rowCount === 0) {
+    throw new AppError(404, 'USER_NOT_FOUND', `No existe un usuario con id ${userId}`);
+  }
+
+  const { rows } = await query<UserTaskRow>(
+    `SELECT t.id,
+            t.title,
+            t.description,
+            t.status,
+            t.created_at,
+            t.archived_at,
+            ta.completed,
+            ta.completed_at
+       FROM task_assignments ta
+       JOIN tasks t ON t.id = ta.task_id
+      WHERE ta.user_id = $1
+      ORDER BY t.id`,
+    [userId],
   );
-  const found = new Set(rows.map((r) => r.id));
-  return ids.filter((id) => !found.has(id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    createdAt: row.created_at.toISOString(),
+    archivedAt: row.archived_at ? row.archived_at.toISOString() : null,
+    completed: row.completed,
+    completedAt: row.completed_at ? row.completed_at.toISOString() : null,
+  }));
 }

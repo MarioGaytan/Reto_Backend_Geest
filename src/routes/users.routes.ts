@@ -6,3 +6,4 @@ export const usersRouter = Router();
 
 usersRouter.post('/', asyncHandler(usersController.create));
 usersRouter.get('/', asyncHandler(usersController.list));
+usersRouter.get('/:idUser/tasks', asyncHandler(usersController.listTasks));

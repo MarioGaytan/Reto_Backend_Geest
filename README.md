@@ -59,9 +59,12 @@ Se copian de `.env.example`. `DATABASE_URL`, `NOTIFY_URL` y `API_KEY` son obliga
 | `POST` | `/tasks` | Registra una tarea con estado `open` |
 | `GET` | `/tasks` | Tareas con sus asignados. Acepta `?status=open\|archived` |
 | `GET` | `/tasks/:idTask` | Detalle de una tarea y quién completó su parte |
+| `POST` | `/tasks/:idTask/assign` | Asigna usuarios sin duplicar la relación |
+| `POST` | `/tasks/:idTask/complete` | Marca la parte del usuario; archiva si ya no queda nadie |
+| `GET` | `/users/:idUser/tasks` | Tareas del usuario, indicando si completó su parte |
 | `GET` | `/health` | Estado del servicio y de la base (infraestructura) |
 
-Pendientes de implementar: `POST /tasks/:idTask/assign`, `POST /tasks/:idTask/complete`, `GET /users/:idUser/tasks`, `GET /tasks/:idTask/notifications`.
+Pendiente de implementar: `GET /tasks/:idTask/notifications`.
 
 Los errores siempre responden con la misma forma:
 
@@ -147,6 +150,8 @@ erDiagram
 
 **Unicidad de email insensible a mayúsculas** (índice sobre `lower(email)`). `Mario@x.com` y `mario@x.com` son la misma persona.
 
+**El archivado automático se serializa con un lock de fila.** `POST /tasks/:idTask/complete` abre una transacción que empieza con `SELECT … FOR UPDATE` sobre la tarea. Si los dos últimos asignados completan a la vez, el segundo espera al primero, ve la tarea ya archivada y no repite la transición. Es la garantía de "exactamente una vez" del Nivel 3.
+
 **Lecturas agregadas en una sola consulta.** `GET /users` y `GET /tasks` construyen sus arreglos anidados con `jsonb_agg` en la base, en vez de consultar las relaciones por cada fila. Evita el problema N+1 sin añadir un ORM.
 
 ---
@@ -158,6 +163,9 @@ erDiagram
 - **El archivado no se revierte.** No existe endpoint para reabrir una tarea ni el enunciado lo pide.
 - **`status` se almacena, no se deriva** de las asignaciones. Es una desnormalización deliberada: archivar dispara un efecto externo (la notificación) y necesita ser una transición bloqueable para garantizar el "exactamente una vez".
 - Un usuario con tareas asignadas no puede borrarse (`ON DELETE RESTRICT`): perdería el histórico y alteraría el conteo de completados.
+- **No hay contraseñas ni sesiones de usuario.** El contrato del reto no las contempla: `POST /users` no recibe contraseña y `POST /tasks/:idTask/complete` recibe el `userId` en el cuerpo. Se interpreta como una API máquina-a-máquina donde el cliente afirma en nombre de quién actúa; la autenticación protege el perímetro con una API Key, no con sesiones por usuario.
+- **Asignar a una tarea archivada devuelve `409`.** Añadir un asignado pendiente a una tarea ya archivada la dejaría en un estado que nada volvería a cerrar, porque no existe reapertura.
+- **Completar dos veces la misma parte no es error.** La segunda llamada responde éxito sin alterar el `completedAt` original, que es el comportamiento esperado ante un doble clic.
 
 ---
 
