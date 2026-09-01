@@ -33,9 +33,21 @@ curl http://localhost:3000/health
 | Comando | Descripción |
 |---|---|
 | `npm run dev` | Desarrollo con recarga automática |
-| `npm test` | **Tests automatizados** |
+| `npm test` | **Tests automatizados** (85 tests) |
 | `npm run migrate` | Aplica las migraciones pendientes |
 | `npm run build` / `npm start` | Compila / ejecuta la versión compilada |
+
+### Tests
+
+```bash
+npm test
+```
+
+Requiere la base levantada (`docker compose up -d`). La suite usa su propia base `geest_test`, que recrea y migra desde cero en cada ejecución, así que no toca los datos de desarrollo. Levanta también un servidor local que hace de destino de `NOTIFY_URL`, lo que permite forzar respuestas `5xx`, `4xx` y caídas para verificar los reintentos sin depender de internet.
+
+La configuración está en `.env.test`, versionada a propósito: no contiene secretos y hace que la suite corra sin ajustes tras clonar el repositorio.
+
+Cubre los 9 endpoints y los tres requisitos de confiabilidad: idempotencia (incluida la ejecución en paralelo), archivado y notificación exactamente una vez, y los reintentos con backoff.
 
 ### Variables de entorno
 

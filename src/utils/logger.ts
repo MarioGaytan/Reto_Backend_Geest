@@ -1,6 +1,17 @@
 type Level = 'info' | 'warn' | 'error' | 'debug';
 
+/**
+ * Durante los tests los logs se silencian: cada peticion y cada query
+ * emitirian una linea y harian ilegible la salida de Jest.
+ * Con LOG_LEVEL=debug se pueden volver a activar para depurar.
+ */
+function isSilenced(): boolean {
+  return process.env.NODE_ENV === 'test' && process.env.LOG_LEVEL !== 'debug';
+}
+
 function write(level: Level, message: string, meta?: unknown): void {
+  if (isSilenced()) return;
+
   const line = {
     ts: new Date().toISOString(),
     level,
@@ -18,4 +29,5 @@ export const logger = {
   debug: (message: string, meta?: unknown) => {
     if (process.env.NODE_ENV !== 'production') write('debug', message, meta);
   },
+
 };
