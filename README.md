@@ -50,6 +50,27 @@ Se copian de `.env.example`. `DATABASE_URL`, `NOTIFY_URL` y `API_KEY` son obliga
 
 ---
 
+## Endpoints
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/users` | Registra un usuario. Valida email y campos obligatorios |
+| `GET` | `/users` | Usuarios con sus tareas pendientes |
+| `POST` | `/tasks` | Registra una tarea con estado `open` |
+| `GET` | `/tasks` | Tareas con sus asignados. Acepta `?status=open\|archived` |
+| `GET` | `/tasks/:idTask` | Detalle de una tarea y quién completó su parte |
+| `GET` | `/health` | Estado del servicio y de la base (infraestructura) |
+
+Pendientes de implementar: `POST /tasks/:idTask/assign`, `POST /tasks/:idTask/complete`, `GET /users/:idUser/tasks`, `GET /tasks/:idTask/notifications`.
+
+Los errores siempre responden con la misma forma:
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "email: no es un correo electronico valido" } }
+```
+
+---
+
 ## Modelo de datos
 
 El esquema está versionado como migraciones SQL en [`migrations/`](migrations/), aplicadas en orden por `npm run migrate`.
@@ -125,6 +146,8 @@ erDiagram
 **Restricciones `CHECK` que hacen imposible el estado inconsistente.** Una tarea `archived` siempre tiene `archived_at`; una `open` nunca lo tiene. Igual para `completed` / `completed_at`. Un archivado a medias no puede existir ni por error de código.
 
 **Unicidad de email insensible a mayúsculas** (índice sobre `lower(email)`). `Mario@x.com` y `mario@x.com` son la misma persona.
+
+**Lecturas agregadas en una sola consulta.** `GET /users` y `GET /tasks` construyen sus arreglos anidados con `jsonb_agg` en la base, en vez de consultar las relaciones por cada fila. Evita el problema N+1 sin añadir un ORM.
 
 ---
 
