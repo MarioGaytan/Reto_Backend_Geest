@@ -62,9 +62,8 @@ Se copian de `.env.example`. `DATABASE_URL`, `NOTIFY_URL` y `API_KEY` son obliga
 | `POST` | `/tasks/:idTask/assign` | Asigna usuarios sin duplicar la relación |
 | `POST` | `/tasks/:idTask/complete` | Marca la parte del usuario; archiva si ya no queda nadie |
 | `GET` | `/users/:idUser/tasks` | Tareas del usuario, indicando si completó su parte |
+| `GET` | `/tasks/:idTask/notifications` | Intentos de notificación de esa tarea |
 | `GET` | `/health` | Estado del servicio y de la base (infraestructura) |
-
-Pendiente de implementar: `GET /tasks/:idTask/notifications`.
 
 Todos los `POST` aceptan el header `Idempotency-Key`. Con la misma llave y el mismo cuerpo la operación se ejecuta una sola vez y ambas respuestas son idénticas, incluso si los requests llegan en paralelo. Con la misma llave y un cuerpo distinto se responde `422`.
 
@@ -154,7 +153,9 @@ erDiagram
 
 **La idempotencia la arbitra el índice único, no una lectura previa.** Entre un `SELECT` que comprueba si la llave existe y el `INSERT` que la crea hay una ventana en la que dos requests paralelos verían ambos "no existe". En su lugar se inserta directamente en `idempotency_keys`: el request que gana mantiene su transacción abierta mientras ejecuta la operación, y el gemelo queda bloqueado en su propio `INSERT` hasta el `COMMIT`, momento en el que lee la respuesta ya guardada y la reproduce. Si la operación falla con `5xx` se hace `ROLLBACK` y la llave queda libre para un reintento real.
 
-**El archivado automático se serializa con un lock de fila.** `POST /tasks/:idTask/complete` abre una transacción que empieza con `SELECT … FOR UPDATE` sobre la tarea. Si los dos últimos asignados completan a la vez, el segundo espera al primero, ve la tarea ya archivada y no repite la transición. Es la garantía de "exactamente una vez" del Nivel 3.
+**El archivado automático se serializa con un lock de fila.** `POST /tasks/:idTask/complete` abre una transacción que empieza con `SELECT … FOR UPDATE` sobre la tarea. Si los dos últimos asignados completan a la vez, el segundo espera al primero, ve la tarea ya archivada y no repite la transición. Como solo esa transacción realiza el cambio, solo ella notifica: archivado y notificación ocurren exactamente una vez.
+
+**La notificación se envía fuera de la transacción.** Los reintentos con backoff tardan segundos y, dentro de la transacción, mantendrían el lock de la fila bloqueando al resto. Se espera únicamente al primer intento —el caso normal— y los reintentos siguen en segundo plano, para no hacer esperar varios segundos a quien completó su parte. Cada intento se registra en la base **antes** de lanzar la petición y se actualiza con el resultado, de modo que queda constancia aunque el proceso muera a mitad del envío. Se reintenta hasta 3 veces con esperas de 1 s y 2 s ante `5xx` o ausencia de respuesta; un `4xx` no se reintenta, porque el destino entendió y rechazó.
 
 **Lecturas agregadas en una sola consulta.** `GET /users` y `GET /tasks` construyen sus arreglos anidados con `jsonb_agg` en la base, en vez de consultar las relaciones por cada fila. Evita el problema N+1 sin añadir un ORM.
 

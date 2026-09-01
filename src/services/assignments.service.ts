@@ -1,7 +1,13 @@
 import type { PoolClient } from 'pg';
 import { withTransaction } from '../db/pool';
 import { AppError } from '../utils/AppError';
-import type { AssignResultDTO, CompleteResultDTO, TaskStatus } from '../types';
+import { notifyTaskArchived } from './notifications.service';
+import type {
+  ArchivedTaskPayload,
+  AssignResultDTO,
+  CompleteResultDTO,
+  TaskStatus,
+} from '../types';
 
 interface TaskLockRow {
   id: number;
@@ -108,7 +114,7 @@ export async function completeUserPart(
   taskId: number,
   userId: number,
 ): Promise<CompleteResultDTO> {
-  return withTransaction(async (client) => {
+  const { result, archivedPayload } = await withTransaction(async (client) => {
     const task = await lockTask(client, taskId);
 
     const { rows: userRows } = await client.query<{ id: number }>(
@@ -153,24 +159,48 @@ export async function completeUserPart(
 
     let status: TaskStatus = task.status;
     let archived = false;
+    let archivedPayload: ArchivedTaskPayload | null = null;
 
     if (pendientes === 0 && task.status === 'open') {
-      await client.query(
-        `UPDATE tasks SET status = 'archived', archived_at = now() WHERE id = $1`,
+      const { rows } = await client.query<{ title: string; archived_at: Date }>(
+        `UPDATE tasks
+            SET status = 'archived', archived_at = now()
+          WHERE id = $1
+      RETURNING title, archived_at`,
         [taskId],
       );
       status = 'archived';
       archived = true;
+
+      // Solo esta ejecucion realizo la transicion open -> archived, gracias al
+      // lock de la fila. Por eso solo ella notificara, exactamente una vez.
+      archivedPayload = {
+        taskId,
+        title: rows[0]!.title,
+        archivedAt: rows[0]!.archived_at.toISOString(),
+      };
     }
 
     return {
-      message: archived
-        ? 'Parte completada. Todos los asignados terminaron y la tarea fue archivada'
-        : 'Parte completada',
-      taskId,
-      userId,
-      taskStatus: status,
-      archived,
+      result: {
+        message: archived
+          ? 'Parte completada. Todos los asignados terminaron y la tarea fue archivada'
+          : 'Parte completada',
+        taskId,
+        userId,
+        taskStatus: status,
+        archived,
+      },
+      archivedPayload,
     };
   });
+
+  // Fuera de la transaccion, ya con el COMMIT hecho: los reintentos con
+  // backoff pueden tardar segundos y dentro mantendrian el lock de la fila
+  // bloqueando al resto.
+  if (archivedPayload) {
+    await notifyTaskArchived(archivedPayload);
+  }
+
+  return result;
 }

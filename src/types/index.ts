@@ -105,3 +105,28 @@ export interface CompleteResultDTO {
   taskStatus: TaskStatus;
   archived: boolean;
 }
+
+/** Datos que viajan en el POST a NOTIFY_URL. */
+export interface ArchivedTaskPayload {
+  taskId: number;
+  title: string;
+  archivedAt: string;
+}
+
+export interface NotificationAttemptDTO {
+  id: number;
+  taskId: number;
+  attemptNumber: number;
+  httpStatus: number | null;
+  success: boolean;
+  createdAt: string;
+}
+
+export interface NotificationAttemptRow {
+  id: number;
+  task_id: number;
+  attempt_number: number;
+  http_status: number | null;
+  success: boolean;
+  created_at: Date;
+}
