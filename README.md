@@ -75,14 +75,16 @@ erDiagram
         varchar email UK "unico, comparado en minusculas"
         timestamptz created_at
     }
+
     tasks {
         int id PK
         varchar title
         text description "nullable"
-        task_status status "open | archived"
+        task_status status "enum: open o archived"
         timestamptz created_at
         timestamptz archived_at "obligatorio si archived"
     }
+
     task_assignments {
         int id PK
         int task_id FK "on delete cascade"
@@ -91,6 +93,7 @@ erDiagram
         timestamptz completed_at "obligatorio si completed"
         timestamptz assigned_at
     }
+
     notification_attempts {
         int id PK
         int task_id FK
@@ -99,6 +102,7 @@ erDiagram
         boolean success
         timestamptz created_at
     }
+
     idempotency_keys {
         int id PK
         varchar idem_key "unico junto a endpoint"
@@ -109,6 +113,8 @@ erDiagram
         timestamptz created_at
     }
 ```
+
+Si el diagrama no se ve renderizado, está también en [`docs/modelo-datos.svg`](docs/modelo-datos.svg).
 
 `task_assignments` es la tabla central: resuelve el muchos-a-muchos y guarda el completado **por persona y por tarea**. `idempotency_keys` no tiene relaciones porque es infraestructura transversal a todos los `POST`.
 
