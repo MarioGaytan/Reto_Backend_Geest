@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { checkConnection } from '../db/pool';
+import { apiKeyAuth } from '../middlewares/apiKey';
 import { usersRouter } from './users.routes';
 import { tasksRouter } from './tasks.routes';
 
@@ -16,5 +17,9 @@ router.get('/health', async (_req, res) => {
   });
 });
 
-router.use('/users', usersRouter);
-router.use('/tasks', tasksRouter);
+// La autenticacion se aplica solo a los routers de negocio, nunca a /health,
+// que debe seguir siendo consultable por el healthcheck del proveedor.
+// Va antes de la idempotencia: no tiene sentido reservar filas en
+// idempotency_keys para peticiones que no estan autenticadas.
+router.use('/users', apiKeyAuth, usersRouter);
+router.use('/tasks', apiKeyAuth, tasksRouter);

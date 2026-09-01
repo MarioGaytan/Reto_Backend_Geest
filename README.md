@@ -63,7 +63,13 @@ Se copian de `.env.example`. `DATABASE_URL`, `NOTIFY_URL` y `API_KEY` son obliga
 | `POST` | `/tasks/:idTask/complete` | Marca la parte del usuario; archiva si ya no queda nadie |
 | `GET` | `/users/:idUser/tasks` | Tareas del usuario, indicando si completó su parte |
 | `GET` | `/tasks/:idTask/notifications` | Intentos de notificación de esa tarea |
-| `GET` | `/health` | Estado del servicio y de la base (infraestructura) |
+| `GET` | `/health` | Estado del servicio y de la base (público, sin clave) |
+
+Todos los endpoints de negocio exigen el header `x-api-key` (ver [Extra](#extra)). `/health` queda fuera para que el proveedor pueda monitorizar el servicio.
+
+```bash
+curl -H "x-api-key: $API_KEY" http://localhost:3000/users
+```
 
 Todos los `POST` aceptan el header `Idempotency-Key`. Con la misma llave y el mismo cuerpo la operación se ejecuta una sola vez y ambas respuestas son idénticas, incluso si los requests llegan en paralelo. Con la misma llave y un cuerpo distinto se responde `422`.
 
@@ -180,9 +186,17 @@ _Se completará al cierre del reto._
 
 ---
 
-## Extra
+## Extra: autenticación por API Key
 
-_Se completará al implementarlo._
+**Qué problema resuelve.** Sin autenticación la API está completamente abierta: cualquiera que descubra la URL puede crear, asignar y archivar tareas, y leer los nombres y correos de todos los usuarios con un `GET /users`. Hay además un abuso menos evidente y más serio: al archivar una tarea la API hace un `POST` saliente a `NOTIFY_URL`, así que un desconocido que archive tareas en bucle convierte el servicio en un amplificador de tráfico contra un tercero, desde esta IP.
+
+**Por qué era necesaria.** Es el único hueco que impediría desplegar esto en producción tal cual. El resto de mejoras posibles optimizan un servicio que funciona; esta cierra un servicio que no debería estar expuesto.
+
+**Por qué sobre otras alternativas.** Se consideraron tres. *Autenticación por usuario con JWT* contradice el contrato del reto: `POST /users` no recibe contraseña y `/complete` recibe el `userId` en el cuerpo, de modo que el actor lo afirma el cliente; introducir sesiones habría exigido columnas fuera del modelo y alterado la funcionalidad requerida. *Rate limiting* trata el síntoma y no la causa: limitar peticiones sin autenticar sigue permitiendo que cualquiera escriba datos, solo que más despacio. *Paginación* es una mejora de escalabilidad, no un hueco del producto.
+
+**Cómo funciona.** Un middleware compara el header `x-api-key` con la variable `API_KEY` usando `crypto.timingSafeEqual`, para que el tiempo de respuesta no revele la clave carácter a carácter. También acepta `Authorization: Bearer <clave>`. Si falta o no coincide responde `401` con el formato de error estándar. Se aplica a los routers de negocio y no a `/health`: un healthcheck autenticado haría que el proveedor diera el despliegue por muerto y reiniciara el contenedor en bucle.
+
+**Hacia dónde crece.** Toda la autenticación vive en un archivo, así que sustituir la clave compartida por claves por cliente (una tabla con la clave hasheada), añadir permisos de solo lectura o aplicar rate limiting por clave en vez de por IP son cambios localizados en ese punto.
 
 ---
 
