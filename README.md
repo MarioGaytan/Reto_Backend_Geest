@@ -1,212 +1,155 @@
-# Reto Backend GEEST
+# Reto GEEST — API de gestión de tareas
 
-API REST construida con **Node.js + TypeScript + Express + PostgreSQL**.
+API REST para crear tareas, asignarlas a varias personas y archivarlas automáticamente cuando todas completan su parte, notificando a un sistema externo.
 
-> Estado: scaffold inicial. Todavia no hay endpoints de negocio implementados.
+**Stack:** Node.js 20 · TypeScript · Express · PostgreSQL 16 · Jest
 
----
-
-## Requisitos previos
-
-| Herramienta | Version | Comprobar con |
-|---|---|---|
-| Node.js | >= 20 | `node -v` |
-| npm | >= 10 | `npm -v` |
-| Docker Desktop | cualquiera reciente | `docker -v` |
-
-No necesitas instalar PostgreSQL en tu maquina: se levanta en un contenedor.
+> URL pública: _pendiente de despliegue_
 
 ---
 
-## Puesta en marcha desde cero
+## Ejecutar localmente
 
-Cuatro pasos desde un clon limpio.
-
-### 1. Clonar e instalar dependencias
+Requisitos: Node >= 20, npm >= 10 y Docker.
 
 ```bash
 git clone <url-del-repositorio>
 cd Reto_Backend_Geest
 npm install
-```
-
-### 2. Crear el archivo de entorno
-
-El archivo `.env` no se versiona. Se genera a partir de la plantilla:
-
-```bash
 cp .env.example .env
-```
-
-En PowerShell, si `cp` te da problemas:
-
-```bash
-Copy-Item .env.example .env
-```
-
-Los valores por defecto ya funcionan en local. Revisa la tabla de [variables de entorno](#variables-de-entorno) para saber cuales debes cambiar.
-
-### 3. Levantar la base de datos
-
-```bash
 docker compose up -d
-```
-
-Esto arranca un PostgreSQL 16 llamado `geest-postgres`. Espera a que quede sano:
-
-```bash
-docker compose ps
-```
-
-Debe mostrar `healthy` en la columna de estado.
-
-### 4. Aplicar migraciones y arrancar
-
-```bash
 npm run migrate
 npm run dev
 ```
 
-La API queda escuchando en `http://localhost:3000`.
-
-> Mientras no existan archivos en `migrations/`, el comando `migrate` responde `No hay migraciones pendientes`. Es correcto.
-
-### Verificar que todo funciona
+La API queda en `http://localhost:3000`. Comprobar:
 
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost:3000/health
 ```
 
-Respuesta esperada:
+### Comandos
 
-```json
-{ "status": "ok", "db": "up", "uptime": 3, "timestamp": "..." }
-```
-
-Si `db` aparece como `"down"`, la API arranco pero no alcanza la base de datos. Ve a [Problemas comunes](#problemas-comunes).
-
----
-
-## Comandos disponibles
-
-| Comando | Que hace |
+| Comando | Descripción |
 |---|---|
-| `npm run dev` | Arranca en modo desarrollo con recarga automatica (tsx watch) |
-| `npm run build` | Compila TypeScript a `dist/` |
-| `npm start` | Ejecuta la version compilada (requiere `build` previo) |
-| `npm test` | Corre la suite de tests con Jest |
-| `npm run test:watch` | Tests en modo watch |
-| `npm run migrate` | Aplica las migraciones SQL pendientes |
-| `npm run migrate:prod` | Igual que `migrate`, pero sobre el codigo compilado |
-| `npm run typecheck` | Valida tipos sin generar archivos |
+| `npm run dev` | Desarrollo con recarga automática |
+| `npm test` | **Tests automatizados** |
+| `npm run migrate` | Aplica las migraciones pendientes |
+| `npm run build` / `npm start` | Compila / ejecuta la versión compilada |
 
-### Comandos de Docker
+### Variables de entorno
 
-| Comando | Que hace |
+Se copian de `.env.example`. `DATABASE_URL`, `NOTIFY_URL` y `API_KEY` son obligatorias y se validan al arrancar.
+
+| Variable | Descripción |
 |---|---|
-| `docker compose up -d` | Levanta PostgreSQL en segundo plano |
-| `docker compose ps` | Muestra el estado del contenedor |
-| `docker compose logs -f db` | Sigue los logs de la base de datos |
-| `docker compose stop` | Detiene el contenedor conservando los datos |
-| `docker compose down` | Detiene y elimina el contenedor (los datos sobreviven en el volumen) |
-| `docker compose down -v` | Elimina tambien el volumen: **borra todos los datos** |
+| `DATABASE_URL` | Conexión a PostgreSQL |
+| `NOTIFY_URL` | Webhook externo notificado al archivar una tarea |
+| `API_KEY` | Clave de acceso a la API (header `x-api-key`) |
+| `PORT` · `NODE_ENV` · `DATABASE_SSL` | Opcionales, con valor por defecto |
 
 ---
 
-## Variables de entorno
+## Modelo de datos
 
-Definidas en `.env`. La plantilla de referencia es `.env.example`.
+El esquema está versionado como migraciones SQL en [`migrations/`](migrations/), aplicadas en orden por `npm run migrate`.
 
-| Variable | Obligatoria | Por defecto | Descripcion |
-|---|---|---|---|
-| `PORT` | No | `3000` | Puerto donde escucha la API |
-| `NODE_ENV` | No | `development` | `development` \| `test` \| `production` |
-| `DATABASE_URL` | **Si** | — | Cadena de conexion a PostgreSQL |
-| `DATABASE_SSL` | No | `false` | Ponlo en `true` con proveedores cloud (Neon, Render, Heroku) |
-| `NOTIFY_URL` | **Si** | — | Webhook externo al que se notifican los cambios de estado |
-| `API_KEY` | **Si** | — | Clave que exigen los endpoints protegidos (header `x-api-key`) |
+```mermaid
+erDiagram
+    users ||--o{ task_assignments : "se le asignan"
+    tasks ||--o{ task_assignments : "agrupa"
+    tasks ||--o{ notification_attempts : "genera"
 
-Las tres obligatorias se validan al arrancar: si falta alguna, el proceso termina con un mensaje explicito en lugar de fallar mas adelante.
+    users {
+        int id PK "identity"
+        varchar name "not null"
+        varchar last_name "not null"
+        varchar email UK "unico, comparado en minusculas"
+        timestamptz created_at "default now()"
+    }
 
-> **Cambia `API_KEY`.** El valor de la plantilla es un placeholder.
+    tasks {
+        int id PK "identity"
+        varchar title "not null"
+        text description "nullable"
+        task_status status "enum: open o archived, default open"
+        timestamptz created_at "default now()"
+        timestamptz archived_at "nullable, obligatorio si archived"
+    }
 
-### Sobre el puerto de la base de datos
+    task_assignments {
+        int id PK "identity"
+        int task_id FK "tasks.id, on delete cascade"
+        int user_id FK "users.id, on delete restrict"
+        boolean completed "default false"
+        timestamptz completed_at "nullable, obligatorio si completed"
+        timestamptz assigned_at "default now()"
+    }
 
-`docker-compose.yml` publica PostgreSQL en el puerto **5436** del host, no en el 5432 habitual. Es deliberado: evita chocar con otros contenedores de PostgreSQL que ya tengas corriendo. Dentro del contenedor el puerto sigue siendo el 5432.
+    notification_attempts {
+        int id PK "identity"
+        int task_id FK "tasks.id, on delete cascade"
+        int attempt_number "unico junto a task_id"
+        int http_status "nullable si el destino no respondio"
+        boolean success "default false"
+        timestamptz created_at "default now()"
+    }
 
-Si prefieres el 5432 y lo tienes libre, cambia el mapeo en `docker-compose.yml` y el puerto en `DATABASE_URL`. Deben coincidir.
+    idempotency_keys {
+        int id PK "identity"
+        varchar idem_key "unico junto a endpoint"
+        varchar endpoint "unico junto a idem_key"
+        varchar request_hash "sha-256 del body"
+        int response_status "nullable mientras la operacion esta en vuelo"
+        jsonb response_body "respuesta ya calculada"
+        timestamptz created_at "default now()"
+    }
+```
+
+`task_assignments` es la tabla central: resuelve la relación muchos-a-muchos y guarda el completado **por persona y por tarea**. `idempotency_keys` no tiene relaciones porque es infraestructura transversal a todos los `POST`.
 
 ---
 
-## Estructura del proyecto
+## Decisiones técnicas
 
-```
-src/
-  app.ts              Configuracion de Express y montaje de rutas
-  server.ts           Arranque del servidor y apagado ordenado
-  config/env.ts       Carga y validacion de variables de entorno
-  routes/             Definicion de rutas
-  controllers/        Manejo de request y response
-  services/           Logica de negocio
-  db/
-    pool.ts           Pool de conexiones, query() y withTransaction()
-    migrate.ts        Ejecutor de migraciones
-  middlewares/        apiKey, errorHandler, notFound, requestLogger
-  utils/              AppError y logger
-migrations/           Migraciones SQL, se aplican en orden alfabetico
-tests/                Tests automatizados
-```
+**PostgreSQL sobre SQLite.** El reto exige escrituras concurrentes correctas (dos usuarios completando a la vez). SQLite serializa con un lock global de escritura; Postgres ofrece `SELECT … FOR UPDATE` a nivel de fila, que es la herramienta exacta para archivar exactamente una vez.
+
+**Sin ORM: driver `pg` y SQL a mano.** El núcleo del reto es control transaccional fino (locks de fila, `ON CONFLICT`). Un ORM oculta justo eso y obligaría a escribir SQL crudo en los puntos críticos de todos modos.
+
+**Migraciones SQL planas con ejecutor propio** (~60 líneas, `src/db/migrate.ts`). Cumple el requisito de esquema versionado sin sumar una dependencia. Aplica solo lo pendiente, cada archivo en su transacción, y registra lo aplicado en `schema_migrations`.
+
+**`status` como `ENUM` y no `VARCHAR`.** La integridad la garantiza la base, no la disciplina del código.
+
+**Las reglas críticas viven en la base, no solo en el servicio.** `UNIQUE (task_id, user_id)` impide duplicar la asignación aunque lleguen requests en paralelo — un `SELECT` previo no lo lograría. `UNIQUE (idem_key, endpoint)` es lo que hace que dos requests simultáneos con la misma `Idempotency-Key` colisionen al insertar en vez de ejecutarse dos veces. `UNIQUE (task_id, attempt_number)` impide registrar dos veces el mismo intento de notificación.
+
+**Restricciones `CHECK` que hacen imposible el estado inconsistente.** Una tarea `archived` siempre tiene `archived_at`; una `open` nunca lo tiene. Igual para `completed` / `completed_at`. Un archivado a medias no puede existir ni por error de código.
+
+**Unicidad de email insensible a mayúsculas** (índice sobre `lower(email)`). `Mario@x.com` y `mario@x.com` son la misma persona.
 
 ---
 
-## Tests
+## Supuestos
 
-```bash
-npm test
-```
-
-Los tests no requieren base de datos: el health check acepta tanto `200` como `503`, de modo que la suite pasa aunque PostgreSQL este apagado.
+- **La notificación externa no se desarrolla.** `NOTIFY_URL` apunta a un endpoint de prueba (webhook.site) para demostrar los reintentos, tal como permite el enunciado.
+- **Una tarea sin usuarios asignados nunca se archiva sola.** El archivado solo se evalúa al completar una parte; sin asignados no hay nada que completar.
+- **El archivado no se revierte.** No existe endpoint para reabrir una tarea ni el enunciado lo pide.
+- **`status` se almacena, no se deriva** de las asignaciones. Es una desnormalización deliberada: archivar dispara un efecto externo (la notificación) y necesita ser una transición bloqueable para garantizar el "exactamente una vez".
+- Un usuario con tareas asignadas no puede borrarse (`ON DELETE RESTRICT`): perdería el histórico y alteraría el conteo de completados.
 
 ---
 
-## Problemas comunes
+## Alcance y recortes
 
-### `password authentication failed for user "..."`
+_Se completará al cierre del reto._
 
-Tu `DATABASE_URL` apunta a un PostgreSQL distinto al del proyecto, normalmente otro contenedor ocupando el mismo puerto. Revisa que puertos estan en uso:
+---
 
-```bash
-docker ps --format "table {{.Names}}\t{{.Ports}}"
-```
+## Extra
 
-Confirma que el puerto de `DATABASE_URL` coincide con el que publica `geest-postgres`.
+_Se completará al implementarlo._
 
-### `Arranque abortado: PostgreSQL no responde`
+---
 
-La base de datos no esta levantada o no es alcanzable. El log incluye host, puerto, base y usuario contra los que se intento conectar. Levantala con:
+## Despliegue
 
-```bash
-docker compose up -d
-```
-
-### `Falta la variable de entorno obligatoria: X`
-
-No existe `.env` o le falta esa variable. Regeneralo desde la plantilla:
-
-```bash
-cp .env.example .env
-```
-
-### El puerto 3000 ya esta en uso
-
-Cambia `PORT` en tu `.env` a un puerto libre.
-
-### Empezar la base de datos desde cero
-
-Borra el volumen y vuelve a levantar:
-
-```bash
-docker compose down -v
-docker compose up -d
-npm run migrate
-```
+_Se completará al desplegar._
